@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AIGC个性化学伴平台 | 智能学习伴侣</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #F5F7FA;
+            color: #303133;
+            line-height: 1.5;
+        }
+
+        /* 通用容器 */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 240px;
+            background: #FFFFFF;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03);
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-area {
+            padding: 20px 16px;
+            border-bottom: 1px solid #EBEEF5;
+            margin-bottom: 16px;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #1677FF, #409EFF);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .logo small {
+            font-size: 12px;
+            color: #909399;
+            background: none;
+            -webkit-background-clip: unset;
+            background-clip: unset;
+        }
+
+        .nav-menu {
+            flex: 1;
+            padding: 0 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+            color: #606266;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            background: #ECF5FF;
+            color: #1677FF;
+        }
+
+        .nav-item i {
+            font-style: normal;
+            font-weight: 500;
+            width: 20px;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            padding: 20px 24px;
+        }
+
+        /* 顶部栏 */
+        .top-bar {
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 12px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+        }
+
+        .welcome-text {
+            font-weight: 500;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .badge-exam {
+            background: #FFF7E6;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #FA8C16;
+        }
+
+        /* 卡片通用样式 */
+        .card {
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+            transition: all 0.2s;
+            border: 1px solid #EBEEF5;
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 网格布局 */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 按钮 */
+        .btn-primary {
+            background: #1677FF;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: 0.2s;
+        }
+
+        .btn-primary:hover {
+            background: #409EFF;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #DCDFE6;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        /* 资源卡片 */
+        .resource-card {
+            border: 1px solid #EBEEF5;
+            border-radius: 12px;
+            padding: 12px;
+            transition: 0.2s;
+        }
+
+        .platform-tag {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .bilibili { background: #FB7299; color: white; }
+        .xiaohongshu { background: #FF2442; color: white; }
+        .douyin { background: #000000; color: white; }
+
+        /* 进度条 */
+        .progress-bar {
+            height: 8px;
+            background: #EBEEF5;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #1677FF;
+            border-radius: 4px;
+            width: 0%;
+        }
+
+        /* 表格样式 (后台) */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #EBEEF5;
+            padding: 12px;
+            text-align: left;
+        }
+        .data-table th {
+            background: #F5F7FA;
+            font-weight: 500;
+        }
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .status-enabled { background: #E6F7E6; color: #2E7D32; }
+        .status-disabled { background: #FFEBEE; color: #C62828; }
+
+        /* 雷达图容器 */
+        .radar-container {
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        hr {
+            margin: 16px 0;
+            border-color: #EBEEF5;
+        }
+
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main-content { margin-left: 0; }
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="app-container">
+    <!-- 侧边栏导航 -->
+    <div class="sidebar">
+        <div class="logo-area">
+            <div class="logo">AIGC学伴平台</div>
+            <div style="font-size:12px; color:#909399">不搬运只链接 · 不问答只引导</div>
+        </div>
+        <div class="nav-menu">
+            <div class="nav-item" data-page="dashboard">📊 首页控制台</div>
+            <div class="nav-item" data-page="resource">📚 学习资源库</div>
+            <div class="nav-item" data-page="profile">🧠 学习画像</div>
+            <div class="nav-item" data-page="aiteacher">🤖 AI教师</div>
+            <div class="nav-item" data-page="learningpath">🗺️ 学习路径</div>
+            <div class="nav-item" data-page="companion">💬 AI陪伴</div>
+            <div class="nav-item" data-page="analytics">📈 学习数据</div>
+            <div class="nav-item" data-page="profilecenter">👤 个人中心</div>
+            <div class="nav-item" data-page="admin">⚙️ 后台管理</div>
+        </div>
+    </div>
+
+    <div class="main-content" id="mainContent">
+        <!-- 动态渲染页面 -->
+    </div>
+</div>
+
+<script>
+    // ---------- 模拟 API 数据 ----------
+    const mockUser = { name: "张三", exam: "考研数学一", daysLeft: 267, todayProgress: 40, streak: 7 };
+    const mockResources = [
+        { id:1, platform:"bilibili", title:"汤家凤-极限精讲", tags:["极限","基础"], duration:45, knowledgePoint:"极限定义" },
+        { id:2, platform:"xiaohongshu", title:"高数概念图解", tags:["导数","进阶"], duration:30, knowledgePoint:"导数概念" },
+        { id:3, platform:"douyin", title:"3分钟搞懂极限", tags:["连续","基础"], duration:3, knowledgePoint:"极限定义" }
+    ];
+    const mockTasks = [
+        { name:"极限精讲", status:"completed" },
+        { name:"变式题训练", status:"inprogress" },
+        { name:"重难点归纳", status:"pending" },
+        { name:"思维导图", status:"pending" }
+    ];
+    const mockPathItems = [
+        { day:"Day 1", date:"4月7日 周一", tasks:["观看B站：汤家凤-极限精讲","完成基础概念选择题"], status:"completed" },
+        { day:"Day 2", date:"4月8日 周二", tasks:["观看B站：武忠祥每日一题","完成极限计算变式题"], status:"inprogress" },
+        { day:"Day 3", date:"4月9日 周三", tasks:["导数定义学习 + 基础计算练习"], status:"locked" }
+    ];
+    const mockKnowledgeMastery = { "极限":90, "导数":75, "积分":60, "级数":32 };
+    const mockSubjects = [
+        { code:"MATH_GL2", name:"概率论", category:"理学", sub:"数学", status:1 },
+        { code:"MATH_GS2", name:"高等数学下", category:"理学", sub:"数学", status:1 },
+        { code:"050101", name:"英语四级", category:"文学", sub:"英语", status:1 }
+    ];
+
+    // 渲染函数
+    function renderPage(pageId) {
+        const container = document.getElementById('mainContent');
+        if (pageId === 'dashboard') container.innerHTML = renderDashboard();
+        else if (pageId === 'resource') container.innerHTML = renderResourceLibrary();
+        else if (pageId === 'profile') container.innerHTML = renderLearningProfile();
+        else if (pageId === 'aiteacher') container.innerHTML = renderAITeacher();
+        else if (pageId === 'learningpath') container.innerHTML = renderLearningPath();
+        else if (pageId === 'companion') container.innerHTML = renderCompanion();
+        else if (pageId === 'analytics') container.innerHTML = renderAnalytics();
+        else if (pageId === 'profilecenter') container.innerHTML = renderProfileCenter();
+        else if (pageId === 'admin') container.innerHTML = renderAdminPanel();
+        else container.innerHTML = renderDashboard();
+
+        // 激活导航样式
+        document.querySelectorAll('.nav-item').forEach(el => {
+            el.classList.remove('active');
+            if(el.getAttribute('data-page') === pageId) el.classList.add('active');
+        });
+        // 图表脚本延迟执行（如果页面有图表）
+        setTimeout(() => { if(window.initCharts) window.initCharts(); }, 100);
+    }
+
+    // 1. 首页控制台
+    function renderDashboard() {
+        return `
+            <div class="top-bar">
+                <div class="welcome-text">下午好，${mockUser.name} 🎓</div>
+                <div class="user-info"><span class="badge-exam">📅 距离考研初试还有 ${mockUser.daysLeft} 天</span><span>🔔</span><span>👤 ${mockUser.name}</span></div>
+            </div>
+            <div class="grid-3">
+                <div class="card"><div class="card-title">📋 今日任务 (${mockTasks.filter(t=>t.status==='completed').length}/${mockTasks.length})</div>
+                    ${mockTasks.map(t => `<div style="margin-bottom:8px">${t.status==='completed'?'✅':'⏳'} ${t.name}</div>`).join('')}
+                    <div class="progress-bar mt-2"><div class="progress-fill" style="width:${mockUser.todayProgress}%"></div></div>
+                </div>
+                <div class="card"><div class="card-title">🎯 推荐资源</div>
+                    <div>🎬 武忠祥·高数强化</div><div>📕 考研数学概念手册</div><div>🎵 3分钟搞定极限</div>
+                    <button class="btn-outline" style="margin-top:12px">更多资源 →</button>
+                </div>
+                <div class="card"><div class="card-title">📊 学习概览</div>
+                    <div>今日已学 1.2h / 目标 2h</div><div>🔥 连续学习 ${mockUser.streak} 天</div>
+                    <div>📈 本周完成率 68%</div>
+                </div>
+            </div>
+            <div class="card"><div class="card-title">💡 AI学习建议</div>根据昨日正确率85%，建议加强【极限运算法则】的变式训练。继续保持节奏！</div>
+        `;
+    }
+
+    // 2. 资源库
+    function renderResourceLibrary() {
+        return `<div class="card"><div class="card-title">📖 学习资源库 <span><button class="btn-outline">筛选 ▼</button></span></div>
+            <div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap">
+                <select class="btn-outline"><option>学科：考研数学一</option></select>
+                <select class="btn-outline"><option>知识点：极限</option></select>
+                <select class="btn-outline"><option>难度：全部</option></select>
+                <input placeholder="🔍 搜索资源" style="padding:6px 12px; border:1px solid #DCDFE6; border-radius:6px">
+            </div>
+            <div class="grid-3">
+                ${mockResources.map(r => `<div class="resource-card"><span class="platform-tag ${r.platform==='bilibili'?'bilibili':r.platform==='xiaohongshu'?'xiaohongshu':'douyin'}">${r.platform==='bilibili'?'B站':r.platform==='xiaohongshu'?'小红书':'抖音'}</span>
+                <div style="margin:8px 0; font-weight:500">${r.title}</div><div>🏷️ ${r.tags.join(' · ')}</div><div>⏱️ ${r.duration}min</div>
+                <button class="btn-primary" style="margin-top:8px; width:100%">开始学习</button></div>`).join('')}
+            </div>
+        </div>`;
+    }
+
+    // 3. 学习画像
+    function renderLearningProfile() {
+        return `<div class="card"><div class="card-title">🧠 我的学习画像 <button class="btn-primary">重新诊断</button></div>
+            <div class="grid-2">
+                <div><div>📊 当前水平 <progress value="65" max="100" style="width:100%"></progress> 中级</div>
+                <div>🐢 学习节奏 慢速 · 细致</div><div>🎬 学习偏好 视频+图文</div>
+                <div>🎯 自律程度 中等</div><div>📅 目标分数 120 / 考研数一</div></div>
+                <div><canvas id="radarChart" width="200" height="200" style="max-height:200px"></canvas></div>
+            </div>
+            <hr><div>💡 诊断结论：计算能力尚可，但对抽象概念理解较弱。建议加强AI思维引导训练。</div>
+        </div>`;
+    }
+
+    // 4. AI教师 (五大能力)
+    function renderAITeacher() {
+        return `<div class="card"><div class="card-title">🤖 AI教师 · 应试引导者 <span style="font-size:12px; background:#ECF5FF; padding:4px 8px; border-radius:20px">不直接给答案，引导思考</span></div>
+            <div class="grid-2">
+                <div><textarea placeholder="粘贴题目、输入知识点或B站链接..." rows="4" style="width:100%; border:1px solid #DCDFE6; border-radius:8px; padding:8px"></textarea>
+                <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+                    <button class="btn-outline">📎 归纳</button><button class="btn-outline">⚠️ 重难点</button>
+                    <button class="btn-outline">💡 解题思路</button><button class="btn-outline">🔄 变式题</button>
+                    <button class="btn-outline">🧠 思维引导</button>
+                </div></div>
+                <div style="background:#F8F9FA; border-radius:12px; padding:16px">
+                    <div style="font-weight:600">【考点归纳】</div> 一元函数极限的四则运算法则与等价无穷小代换。
+                    <div style="font-weight:600; margin-top:12px">⚠️ 重点与易错</div> 等价无穷小代换：乘除可用，加减慎用！
+                    <div style="font-weight:600; margin-top:12px">📝 解题步骤</div> 1. 判断0/0型 2. 洛必达或泰勒展开 3. 得出结果 1/2
+                    <div style="font-weight:600; margin-top:12px">🔄 变式题目</div> lim(x→0) (1-cosx)/(x·sinx) → 生成同类题
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // 5. 学习路径
+    function renderLearningPath() {
+        return `<div class="card"><div class="card-title">🗺️ 个性化学习路径 · 考研冲刺 <span>整体进度 ▰▰▰▰▰▰▱▱▱▱ 40%</span></div>
+            ${mockPathItems.map(item => `
+                <div style="border-left: 3px solid ${item.status==='completed'?'#52C41A':item.status==='inprogress'?'#1677FF':'#DCDFE6'}; padding-left:16px; margin-bottom:24px">
+                    <div style="font-weight:600">${item.day} · ${item.date}  ${item.status==='completed'?'✅ 已完成':item.status==='inprogress'?'⏳ 进行中':'🔒 待解锁'}</div>
+                    ${item.tasks.map(t => `<div> ✓ ${t}</div>`).join('')}
+                    ${item.status==='inprogress' ? '<button class="btn-primary" style="margin-top:8px">去完成</button>' : ''}
+                </div>
+            `).join('')}
+            <div class="flex-between"><button class="btn-outline">↩️ 回退任务</button><button class="btn-outline">⏭️ 跳过</button><button class="btn-primary">✅ 完成任务</button></div>
+        </div>`;
+    }
+
+    // 6. 陪伴监督
+    function renderCompanion() {
+        return `<div class="grid-2">
+            <div class="card"><div class="card-title">📊 今日学习总结</div><div>📅 学习时长 125 分钟</div><div>✅ 完成 3/4 项任务</div><div>📈 考点掌握率 +5%</div></div>
+            <div class="card"><div class="card-title">🎯 AI学习纠偏</div><div>你今天在无穷小比阶上错了2次，概念不够扎实。明天建议先回顾等价无穷小替换规则的思维导图。加油！</div></div>
+            <div class="card"><div class="card-title">📋 明日学习计划</div>📺 导数概念入门 (30min)<br>✏️ 导数定义选择题 (5道)<br>🧠 AI归纳：导数与极限的关系</div>
+            <div class="card"><div class="card-title">⏰ 学习提醒设置</div><div>🔘 每日提醒时间 <select><option>19:30</option></select>  ☑️站内通知 ☐微信推送</div></div>
+        </div>`;
+    }
+
+    // 7. 数据分析
+    function renderAnalytics() {
+        return `<div class="card"><div class="card-title">📈 学习数据分析</div>
+            <div class="grid-2"><div><canvas id="masteryRadar" height="200"></canvas></div><div><canvas id="trendLine" height="200"></canvas></div></div>
+            <div class="card-title" style="margin-top:20px">📚 专题完成度</div>
+            <div>高等数学 ▰▰▰▰▰▰▰▰▰▰ 80% (极限100%, 导数60%, 积分70%)</div><div>线性代数 ▰▰▰▰▰▰▱▱▱▱ 55%</div>
+            <div class="mt-2">💡 强项：极限计算(90分)，弱项：无穷级数(32分)。建议优先攻克级数专题。</div>
+        </div>`;
+    }
+
+    // 8. 个人中心
+    function renderProfileCenter() {
+        return `<div class="grid-2">
+            <div class="card"><div class="card-title">👤 个人资料</div><div>用户名：张三</div><div>邮箱：zhangsan@example.com</div><div>手机：138****1234</div><button class="btn-primary">保存修改</button></div>
+            <div class="card"><div class="card-title">🔐 安全设置</div><button class="btn-outline">修改密码</button><hr><div class="card-title">⭐ 我的收藏</div><div>暂无收藏资源</div><div class="card-title">❌ 错题本</div><div>极限计算错题集 (3道)</div></div>
+        </div>`;
+    }
+
+    // 9. 后台管理（参照表格截图）
+    function renderAdminPanel() {
+        return `<div class="card"><div class="card-title">⚙️ 后台管理系统 · 科目管理 <button class="btn-primary" style="float:right">+ 新增科目</button></div>
+            <table class="data-table"><thead><tr><th>科目代码</th><th>科目名称</th><th>分类</th><th>二级分类</th><th>状态</th><th>操作</th></tr></thead><tbody>
+                ${mockSubjects.map(s => `<tr><td>${s.code}</td><td>${s.name}</td><td>${s.category}</td><td>${s.sub}</td><td><span class="status-badge ${s.status===1?'status-enabled':'status-disabled'}">${s.status===1?'启用':'禁用'}</span></td><td><button class="btn-outline">修改</button> <button class="btn-outline">删除</button></td></tr>`).join('')}
+            </tbody></table>
+            <div style="margin-top:20px"><span>共 ${mockSubjects.length} 条</span> <button class="btn-outline">导入</button> <button class="btn-outline">模板导出</button></div>
+        </div>`;
+    }
+
+    // 简单图表初始化 (模拟)
+    window.initCharts = function() {
+        let radarCanvas = document.getElementById('radarChart');
+        if(radarCanvas) new Chart(radarCanvas, { type:'radar', data:{ labels:['极限','导数','积分','级数','连续'], datasets:[{ data:[90,75,60,32,80], backgroundColor:'rgba(22,119,255,0.2)' }] } });
+        let masteryCanvas = document.getElementById('masteryRadar');
+        if(masteryCanvas) new Chart(masteryCanvas, { type:'radar', data:{ labels:['极限','导数','积分','级数'], datasets:[{ data:[90,75,60,32] }] } });
+        let trendCanvas = document.getElementById('trendLine');
+        if(trendCanvas) new Chart(trendCanvas, { type:'line', data:{ labels:['一','二','三','四','五','六','日'], datasets:[{ label:'学习时长(min)', data:[45,60,30,90,70,110,85], borderColor:'#1677FF' }] } });
+    };
+
+    // 绑定导航事件
+    document.querySelectorAll('.nav-item').forEach(el => {
+        el.addEventListener('click', (e) => {
+            const page = el.getAttribute('data-page');
+            renderPage(page);
+        });
+    });
+    // 默认加载首页
+    renderPage('dashboard');
+</script>
+</body>
+</html>
