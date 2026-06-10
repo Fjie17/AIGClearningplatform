@@ -1,0 +1,2 @@
+# AIGClearningplatform
+AIGC个性化学习平台springboot+vue3
