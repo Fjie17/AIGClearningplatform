@@ -27,4 +27,20 @@ public interface LearningResourceRepository extends JpaRepository<LearningResour
     boolean existsByResourceUrl(String resourceUrl);
     
     Optional<LearningResource> findByResourceUrl(String resourceUrl);
+
+    List<LearningResource> findByIdIn(List<Long> ids);
+
+    @Query("SELECT COUNT(r) FROM LearningResource r WHERE r.aiMatchVersion IS NULL OR r.aiMatchVersion <> :currentVersion")
+    long countOutdatedByVersion(String currentVersion);
+
+    @Query("SELECT COUNT(r) FROM LearningResource r WHERE (r.aiMatchVersion IS NULL OR r.aiMatchVersion <> :currentVersion) "
+            + "AND (:subjectId IS NULL OR r.subjectId = :subjectId)")
+    long countOutdatedByVersionAndSubjectId(String currentVersion, Long subjectId);
+
+    @Query("SELECT r FROM LearningResource r WHERE (r.aiMatchVersion IS NULL OR r.aiMatchVersion <> :currentVersion) "
+            + "AND (:subjectId IS NULL OR r.subjectId = :subjectId) ORDER BY r.id ASC")
+    List<LearningResource> findOutdatedByVersion(String currentVersion, Long subjectId);
+
+    @Query("SELECT r.aiMatchVersion, COUNT(r) FROM LearningResource r GROUP BY r.aiMatchVersion ORDER BY r.aiMatchVersion")
+    List<Object[]> countGroupByAiMatchVersion();
 }

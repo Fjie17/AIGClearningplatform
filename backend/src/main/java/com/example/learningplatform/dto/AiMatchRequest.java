@@ -5,6 +5,7 @@ public class AiMatchRequest {
     private String topic;
     private String platform;
     private Long subjectId;
+    private String resourceUrl;
 
     // getters and setters
     public String getTitle() { return title; }
@@ -15,4 +16,6 @@ public class AiMatchRequest {
     public void setPlatform(String platform) { this.platform = platform; }
     public Long getSubjectId() { return subjectId; }
     public void setSubjectId(Long subjectId) { this.subjectId = subjectId; }
+    public String getResourceUrl() { return resourceUrl; }
+    public void setResourceUrl(String resourceUrl) { this.resourceUrl = resourceUrl; }
 }

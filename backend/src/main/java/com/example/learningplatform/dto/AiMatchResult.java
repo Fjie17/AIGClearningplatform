@@ -7,6 +7,7 @@ public class AiMatchResult {
     private String confidence;
     private String matchInfo;
     private String description;
+    private String aiMatchVersion;
 
     public Long getKnowledgePointId() { return knowledgePointId; }
     public void setKnowledgePointId(Long knowledgePointId) { this.knowledgePointId = knowledgePointId; }
@@ -20,4 +21,6 @@ public class AiMatchResult {
     public void setMatchInfo(String matchInfo) { this.matchInfo = matchInfo; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+    public String getAiMatchVersion() { return aiMatchVersion; }
+    public void setAiMatchVersion(String aiMatchVersion) { this.aiMatchVersion = aiMatchVersion; }
 }

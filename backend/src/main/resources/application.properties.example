@@ -32,13 +32,18 @@ spring.mail.properties.mail.smtp.ssl.enable=true
 spring.mail.default-encoding=UTF-8
 
 # ===============================
-# AI API 配置（千问）
+# AI API 配置
 # ===============================
 ai.api-key=your_api_key
-ai.api-url=https://dashscope.aliyuncs.com/compatible-mode/v1
-ai.model=qwen-max
+ai.api-url=https://api.deepseek.com
+ai.model=deepseek-v4-flash
 ai.temperature=0.1
-ai.max-tokens=500
+ai.max-tokens=1500
+# AI 匹配算法版本号（升级算法时递增，如 1.0 → 2.0，再调用 POST /ai-rematch 批量升级历史资源）
+ai.match-version=1.1
+# 抓取资源链接页面的超时（毫秒）
+ai.url-connect-timeout-ms=15000
+ai.url-read-timeout-ms=60000
 
 # ===============================
 # Redis 配置

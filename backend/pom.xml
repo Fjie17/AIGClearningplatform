@@ -85,6 +85,12 @@
 		    <groupId>org.springframework.boot</groupId>
 		    <artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
+		<!-- HTML 解析（抓取资源链接页面内容） -->
+		<dependency>
+		    <groupId>org.jsoup</groupId>
+		    <artifactId>jsoup</artifactId>
+		    <version>1.18.3</version>
+		</dependency>
 		<dependency>
 			<groupId>com.mysql</groupId>
 			<artifactId>mysql-connector-j</artifactId>

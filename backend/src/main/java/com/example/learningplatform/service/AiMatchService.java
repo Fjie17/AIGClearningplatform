@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 
 import com.example.learningplatform.config.AiConfig;
 import com.example.learningplatform.dto.AiMatchResult;
+import com.example.learningplatform.dto.ResourcePageContent;
 import com.example.learningplatform.entity.KnowledgePoint;
 import com.example.learningplatform.entity.Subject;
 import com.example.learningplatform.repository.KnowledgePointRepository;
@@ -43,6 +44,12 @@ public class AiMatchService {
 
     @Autowired
     private KnowledgePointRepository knowledgePointRepository;
+
+    @Autowired
+    private ResourceUrlContentFetcher resourceUrlContentFetcher;
+
+    @Autowired
+    private AiMatchVersionManager versionManager;
 
     public Long matchSubject(String title, List<String> tags) {
         List<Subject> allSubjects = subjectRepository.findAll();
@@ -200,10 +207,10 @@ public class AiMatchService {
         requestBody.put("messages", messages);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+        String apiUrl = aiConfig.getChatCompletionsUrl();
 
         try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    aiConfig.getApiUrl() + "/chat/completions", request, Map.class);
+            ResponseEntity<Map> response = restTemplate.postForEntity(apiUrl, request, Map.class);
 
             if (response.getStatusCode().is2xxSuccessful()) {
                 Map<String, Object> body = response.getBody();
@@ -217,7 +224,7 @@ public class AiMatchService {
                 }
             }
         } catch (RestClientException e) {
-            logger.warning("AI API调用异常: " + e.getMessage());
+            logger.warning("AI API调用异常 [" + apiUrl + "]: " + e.getMessage());
         }
 
         return null;
@@ -312,145 +319,81 @@ public class AiMatchService {
     }
 
     public AiMatchResult processResource(String title, String topic, String link, String platform, Long subjectId) {
-        AiMatchResult result = new AiMatchResult();
-        
+        return processResource(title, topic, link, platform, subjectId, null, null, null);
+    }
+
+    public AiMatchResult processResource(String title, String topic, String link, String platform,
+            Long subjectId, String resourceType, Integer duration, Integer classHours) {
         List<KnowledgePoint> knowledgePoints = knowledgePointRepository.findBySubjectId(subjectId);
-        
-        StringBuilder kpJson = new StringBuilder("[");
-        for (int i = 0; i < knowledgePoints.size(); i++) {
-            KnowledgePoint kp = knowledgePoints.get(i);
-            if (i > 0) {
-                kpJson.append(",");
-            }
-            kpJson.append("{\"id\":").append(kp.getId()).append(",\"name\":\"").append(kp.getName()).append("\"}");
-        }
-        kpJson.append("]");
-        
-        String prompt = String.format("""
-                你是一个专业的教育资源标签与知识点匹配助手。你的任务是根据用户提供的【资源标题】和【资源介绍】，从给定的【候选知识点列表】中，选出与该资源关联度最高（匹配度最高）的一个知识点的 ID，以及其他需要提炼的内容
-                
-                【候选知识点列表】
-                %s
-                
-                【待分析的资源信息】
-                平台：%s
-                标题：%s
-                简介：%s
-                
-                【严格输出要求】
-                请仔细分析资源信息，只能从上述【候选知识点列表】中选择一个最匹配的 id。
-                绝对不允许编造列表中不存在的 ID。如果找不到合适的，请返回 -1。
-                最终结果请直接以 JSON 格式返回，不要包含任何额外的解释、Markdown 标记或废话。
-                
-                JSON 格式必须如下：
-                {
-                "knowledge_point_id": 选中的ID数字,
-                "tags": "标签1,标签2,标签3",
-                "ai_match_confidence": "适合人群1,适合人群2",
-                "description": "不超过50字的精简介绍"
-                }
-                """, kpJson, platform != null ? platform : "", title, topic != null ? topic : "");
-        
-        String aiResponse = null;
-        try {
-            logger.info("开始调用AI接口，资源标题: " + title + ", 平台: " + platform);
-            aiResponse = callAiApi(prompt);
-            logger.info("AI调用完成，响应: " + (aiResponse != null && aiResponse.length() > 100 ? aiResponse.substring(0, 100) + "..." : aiResponse));
-            
-            if (aiResponse != null && !aiResponse.isEmpty()) {
-                aiResponse = aiResponse.trim();
-                
-                if (aiResponse.startsWith("```json")) {
-                    aiResponse = aiResponse.substring(7);
-                }
-                if (aiResponse.endsWith("```")) {
-                    aiResponse = aiResponse.substring(0, aiResponse.length() - 3);
-                }
-                
-                aiResponse = aiResponse.trim();
-                
-                try {
-                    JsonNode jsonNode = objectMapper.readTree(aiResponse);
-                    
-                    long kpId = jsonNode.has("knowledge_point_id") ? jsonNode.get("knowledge_point_id").asLong(-1) : -1;
-                    Long finalKpId = null;
-                    
-                    if (kpId == -1 || kpId == 0) {
-                        logger.info("AI返回-1或0，使用本地匹配");
-                        List<String> tags = extractTags(title);
-                        finalKpId = localMatchKnowledgePoint(knowledgePoints, title, tags);
-                    } else {
-                        long finalId = kpId;
-                        boolean exists = knowledgePoints.stream()
-                                .anyMatch(kp -> kp.getId().equals(finalId));
-                        if (exists) {
-                            logger.info("AI返回的知识点ID有效: " + kpId);
-                            finalKpId = kpId;
-                        } else {
-                            logger.warning("AI返回的知识点ID不存在于列表中: " + kpId + "，使用本地匹配");
-                            List<String> tags = extractTags(title);
-                            finalKpId = localMatchKnowledgePoint(knowledgePoints, title, tags);
-                        }
-                    }
-                    result.setKnowledgePointId(finalKpId);
-                    
-                    String kpName = null;
-                    if (finalKpId != null) {
-                        long tempId = finalKpId;
-                        kpName = knowledgePoints.stream()
-                                .filter(kp -> kp.getId().equals(tempId))
-                                .map(KnowledgePoint::getName)
-                                .findFirst()
-                                .orElse(null);
-                    }
-                    result.setKnowledgePointName(kpName);
-                    
-                    String tags = jsonNode.has("tags") ? jsonNode.get("tags").asText("") : "";
-                    tags = truncateTags(tags, 5);
-                    result.setTags(tags);
-                    
-                    String confidence = jsonNode.has("ai_match_confidence") ? jsonNode.get("ai_match_confidence").asText("") : "";
-                    confidence = truncateTags(confidence, 5);
-                    result.setConfidence(confidence);
-                    
-                    String description = jsonNode.has("description") ? jsonNode.get("description").asText("") : "";
-                    if (description.length() > 50) {
-                        description = description.substring(0, 50) + "...";
-                    }
-                    result.setDescription(description);
-                    
-                    String matchInfo = String.format("{\"subjectId\":%d,\"knowledgePointId\":%d,\"knowledgePointName\":\"%s\",\"platform\":\"%s\"}", 
-                            subjectId, finalKpId != null ? finalKpId : 0, kpName != null ? kpName : "", platform);
-                    result.setMatchInfo(matchInfo);
-                    
-                    logger.info("AI处理完成，知识点ID: " + finalKpId + ", 知识点名称: " + kpName + ", 标签: " + tags);
-                    return result;
-                } catch (Exception e) {
-                    logger.warning("解析AI返回的JSON失败: " + e.getMessage() + ", response: " + aiResponse);
-                }
-            } else {
-                logger.warning("AI返回为空");
-            }
-        } catch (Exception e) {
-            logger.warning("调用AI API失败: " + e.getMessage());
-        }
-        
-        return processResourceFallback(title, topic, link, platform, subjectId);
+        return executeResourceMatch(title, topic, link, platform, subjectId, resourceType, duration, classHours,
+                knowledgePoints, versionManager.getCurrentVersion(),
+                "开始调用AI接口，资源标题: " + title + ", 链接: " + link);
     }
     
-    public AiMatchResult processResourceWithKnowledgePoints(String title, String topic, String link, String platform, List<KnowledgePoint> knowledgePoints) {
-        AiMatchResult result = new AiMatchResult();
-        
+    public AiMatchResult processResourceWithKnowledgePoints(String title, String topic, String link, String platform,
+            List<KnowledgePoint> knowledgePoints) {
+        return processResourceWithKnowledgePoints(title, topic, link, platform, knowledgePoints,
+                versionManager.getCurrentVersion());
+    }
+
+    public AiMatchResult processResourceWithKnowledgePoints(String title, String topic, String link, String platform,
+            List<KnowledgePoint> knowledgePoints, String matchVersion) {
         if (knowledgePoints == null || knowledgePoints.isEmpty()) {
             logger.warning("知识点列表为空");
-            return result;
+            return new AiMatchResult();
         }
-        
-        Long subjectId = null;
-        if (!knowledgePoints.isEmpty() && knowledgePoints.get(0).getSubjectId() != null) {
-            subjectId = knowledgePoints.get(0).getSubjectId();
+
+        Long subjectId = knowledgePoints.get(0).getSubjectId();
+        return executeResourceMatch(title, topic, link, platform, subjectId, null, null, null,
+                knowledgePoints, matchVersion,
+                "开始调用AI接口（使用传入的知识点列表），资源标题: " + title + ", 链接: " + link);
+    }
+
+    private AiMatchResult executeResourceMatch(String title, String topic, String resourceUrl, String platform,
+            Long subjectId, String resourceType, Integer duration, Integer classHours,
+            List<KnowledgePoint> knowledgePoints, String matchVersion, String logPrefix) {
+        ResourcePageContent pageContent = fetchPageContent(resourceUrl);
+        String kpJson = buildKnowledgePointJson(knowledgePoints);
+        String prompt = buildResourceMatchPrompt(kpJson, platform, title, topic, resourceType, duration, classHours,
+                pageContent);
+
+        try {
+            logger.info(logPrefix);
+            String aiResponse = callAiApi(prompt);
+            logger.info("AI调用完成，响应: " + (aiResponse != null && aiResponse.length() > 100
+                    ? aiResponse.substring(0, 100) + "..." : aiResponse));
+
+            AiMatchResult parsed = parseAiMatchResponse(aiResponse, knowledgePoints, title, subjectId, platform,
+                    pageContent, matchVersion);
+            if (parsed != null) {
+                return parsed;
+            }
+        } catch (Exception e) {
+            logger.warning("调用AI API失败: " + e.getMessage());
         }
-        
+
+        AiMatchResult fallback = processResourceFallback(title, topic, resourceUrl, platform, subjectId, resourceType,
+                pageContent, matchVersion);
+        return fallback;
+    }
+
+    private ResourcePageContent fetchPageContent(String resourceUrl) {
+        if (resourceUrl == null || resourceUrl.isBlank()) {
+            ResourcePageContent empty = new ResourcePageContent();
+            empty.setFetchSuccess(false);
+            empty.setErrorMessage("未提供资源链接");
+            return empty;
+        }
+
+        logger.info("开始抓取资源链接页面内容: " + resourceUrl);
+        long startMs = System.currentTimeMillis();
+        ResourcePageContent content = resourceUrlContentFetcher.fetch(resourceUrl);
+        logger.info("链接抓取完成，耗时 " + (System.currentTimeMillis() - startMs) + " ms，成功="
+                + content.isFetchSuccess());
+        return content;
+    }
+
+    private String buildKnowledgePointJson(List<KnowledgePoint> knowledgePoints) {
         StringBuilder kpJson = new StringBuilder("[");
         for (int i = 0; i < knowledgePoints.size(); i++) {
             KnowledgePoint kp = knowledgePoints.get(i);
@@ -460,120 +403,223 @@ public class AiMatchService {
             kpJson.append("{\"id\":").append(kp.getId()).append(",\"name\":\"").append(kp.getName()).append("\"}");
         }
         kpJson.append("]");
-        
-        String prompt = String.format("""
-                你是一个专业的教育资源标签与知识点匹配助手。你的任务是根据用户提供的【资源标题】和【资源介绍】，从给定的【候选知识点列表】中，选出与该资源关联度最高（匹配度最高）的一个知识点的 ID，以及其他需要提炼的内容
-                
-                【候选知识点列表】
+        return kpJson.toString();
+    }
+
+    /**
+     * 构建资源 AI 匹配 Prompt。
+     * tags 描述资源内容；ai_match_confidence 按 LQAI 四维学格（水平/速度/偏好/自律）+ 学习特征标注，供后续个性化推荐。
+     */
+    private String buildResourceMatchPrompt(String kpJson, String platform, String title, String topic,
+            String resourceType, Integer duration, Integer classHours, ResourcePageContent pageContent) {
+        String durationInfo = duration != null ? duration + "分钟" : "未知";
+        String classHoursInfo = classHours != null ? classHours + "课时" : "未知";
+        String pageSection = pageContent != null ? pageContent.toPromptSection() : "无";
+
+        return String.format("""
+                你是「AIGC 学习平台」的教育资源分析与学格匹配助手。请根据资源链接页面识别到的实际内容，完成知识点匹配，并生成可用于 LQAI 学格个性化推荐的标准化标签。
+
+                ## 一、任务说明
+                1. **首要依据**：【从资源链接抓取的页面实况】—— 你必须基于链接页面中识别到的标题、简介、标签、正文摘要来判断资源真实内容。
+                2. 爬虫元数据（标题/话题等）仅作辅助参考，若与页面实况冲突，以页面实况为准。
+                3. 从【候选知识点列表】中选出关联度最高的 1 个知识点 ID。
+                4. 生成 tags、ai_match_confidence、description。
+
+                ## 二、候选知识点列表（只能从中选择，禁止编造 ID）
                 %s
-                
-                【待分析的资源信息】
-                平台：%s
-                标题：%s
-                简介：%s
-                
-                【严格输出要求】
-                请仔细分析资源信息，只能从上述【候选知识点列表】中选择一个最匹配的 id。
-                绝对不允许编造列表中不存在的 ID。如果找不到合适的，请返回 -1。
-                最终结果请直接以 JSON 格式返回，不要包含任何额外的解释、Markdown 标记或废话。
-                
-                JSON 格式必须如下：
+
+                ## 三、从资源链接抓取的页面实况（AI 匹配首要依据）
+                %s
+
+                ## 四、爬虫/平台元数据（辅助参考）
+                - 平台：%s
+                - 资源类型：%s
+                - 爬虫标题：%s
+                - 爬虫话题/简介：%s
+                - 爬虫时长：%s
+                - 爬虫课时：%s
+
+                ## 五、知识点匹配规则
+                - 综合页面实况与元数据判断资源核心教学内容。
+                - 若标题较宽泛（如「全集」「入门到精通」），以页面简介/正文摘要确定最相关的单一知识点。
+                - 只能从候选列表中选 1 个 ID；页面内容不足以判断时 knowledge_point_id 返回 -1。
+
+                ## 六、tags 生成规则（内容标签，最多 5 个，英文逗号分隔）
+                基于页面实际内容，不要重复 ai_match_confidence 的学格维度词。
+                - 2~3 个：与知识点/主题直接相关的核心词
+                - 1~2 个：内容形态或场景词（如「例题讲解」「公式推导」「刷题训练」）
+                要求：每个标签 2~8 字，名词或短语。
+
+                ## 七、ai_match_confidence 生成规则（学格匹配标签，固定 5 个，英文逗号分隔）
+                按顺序从下列选项中各选 1 个：
+                第1项-水平适配：入门 | 基础 | 中等 | 进阶 | 高级
+                第2项-节奏适配：速成突击 | 快节奏 | 适中 | 系统讲解 | 慢节奏深度
+                第3项-形式适配：视频向 | 文本向 | 音频向 | 实践向
+                第4项-自律适配：需高自律 | 中等自律 | 低自律友好 | 可碎片化 | 适合突击
+                第5项-学习特征：易错点多 | 概念抽象 | 计算密集 | 记忆为主 | 理解为主 | 综合应用
+
+                ## 八、输出格式（仅输出 JSON，无 Markdown、无解释）
                 {
-                "knowledge_point_id": 选中的ID数字,
-                "tags": "标签1,标签2,标签3",
-                "ai_match_confidence": "适合人群1,适合人群2",
-                "description": "不超过50字的精简介绍"
+                  "knowledge_point_id": 数字或-1,
+                  "tags": "标签1,标签2,标签3",
+                  "ai_match_confidence": "水平词,节奏词,形式词,自律词,特征词",
+                  "description": "不超过50字的简介",
+                  "match_dimensions": {
+                    "level": "与ai_match_confidence第1项相同",
+                    "pace": "与第2项相同",
+                    "format": "与第3项相同",
+                    "discipline": "与第4项相同",
+                    "trait": "与第5项相同"
+                  }
                 }
-                """, kpJson, platform != null ? platform : "", title, topic != null ? topic : "");
-        
-        String aiResponse = null;
-        try {
-            logger.info("开始调用AI接口（使用传入的知识点列表），资源标题: " + title + ", 平台: " + platform);
-            aiResponse = callAiApi(prompt);
-            logger.info("AI调用完成，响应: " + (aiResponse != null && aiResponse.length() > 100 ? aiResponse.substring(0, 100) + "..." : aiResponse));
-            
-            if (aiResponse != null && !aiResponse.isEmpty()) {
-                aiResponse = aiResponse.trim();
-                
-                if (aiResponse.startsWith("```json")) {
-                    aiResponse = aiResponse.substring(7);
-                }
-                if (aiResponse.endsWith("```")) {
-                    aiResponse = aiResponse.substring(0, aiResponse.length() - 3);
-                }
-                
-                aiResponse = aiResponse.trim();
-                
-                try {
-                    JsonNode jsonNode = objectMapper.readTree(aiResponse);
-                    
-                    long kpId = jsonNode.has("knowledge_point_id") ? jsonNode.get("knowledge_point_id").asLong(-1) : -1;
-                    Long finalKpId = null;
-                    
-                    if (kpId == -1 || kpId == 0) {
-                        logger.info("AI返回-1或0，使用本地匹配");
-                        List<String> tags = extractTags(title);
-                        finalKpId = localMatchKnowledgePoint(knowledgePoints, title, tags);
-                    } else {
-                        long finalId = kpId;
-                        boolean exists = knowledgePoints.stream()
-                                .anyMatch(kp -> kp.getId().equals(finalId));
-                        if (exists) {
-                            logger.info("AI返回的知识点ID有效: " + kpId);
-                            finalKpId = kpId;
-                        } else {
-                            logger.warning("AI返回的知识点ID不存在于列表中: " + kpId + "，使用本地匹配");
-                            List<String> tags = extractTags(title);
-                            finalKpId = localMatchKnowledgePoint(knowledgePoints, title, tags);
-                        }
-                    }
-                    result.setKnowledgePointId(finalKpId);
-                    
-                    String kpName = null;
-                    if (finalKpId != null) {
-                        long tempId = finalKpId;
-                        kpName = knowledgePoints.stream()
-                                .filter(kp -> kp.getId().equals(tempId))
-                                .map(KnowledgePoint::getName)
-                                .findFirst()
-                                .orElse(null);
-                    }
-                    result.setKnowledgePointName(kpName);
-                    
-                    String tags = jsonNode.has("tags") ? jsonNode.get("tags").asText("") : "";
-                    tags = truncateTags(tags, 5);
-                    result.setTags(tags);
-                    
-                    String confidence = jsonNode.has("ai_match_confidence") ? jsonNode.get("ai_match_confidence").asText("") : "";
-                    confidence = truncateTags(confidence, 5);
-                    result.setConfidence(confidence);
-                    
-                    String description = jsonNode.has("description") ? jsonNode.get("description").asText("") : "";
-                    if (description.length() > 50) {
-                        description = description.substring(0, 50) + "...";
-                    }
-                    result.setDescription(description);
-                    
-                    String matchInfo = String.format("{\"subjectId\":%d,\"knowledgePointId\":%d,\"knowledgePointName\":\"%s\",\"platform\":\"%s\"}", 
-                            subjectId != null ? subjectId : 0, finalKpId != null ? finalKpId : 0, kpName != null ? kpName : "", platform != null ? platform : "");
-                    result.setMatchInfo(matchInfo);
-                    
-                    logger.info("AI处理完成（使用传入知识点列表），知识点ID: " + finalKpId + ", 知识点名称: " + kpName + ", 标签: " + tags);
-                    return result;
-                } catch (Exception e) {
-                    logger.warning("解析AI返回的JSON失败: " + e.getMessage() + ", response: " + aiResponse);
-                }
-            } else {
-                logger.warning("AI返回为空");
-            }
-        } catch (Exception e) {
-            logger.warning("调用AI API失败: " + e.getMessage());
+                """,
+                kpJson,
+                pageSection,
+                platform != null ? platform : "未知",
+                resourceType != null ? resourceType : "未知",
+                title != null ? title : "",
+                topic != null ? topic : "无",
+                durationInfo,
+                classHoursInfo);
+    }
+
+    private AiMatchResult parseAiMatchResponse(String aiResponse, List<KnowledgePoint> knowledgePoints,
+            String title, Long subjectId, String platform, ResourcePageContent pageContent, String matchVersion) {
+        if (aiResponse == null || aiResponse.isEmpty()) {
+            logger.warning("AI返回为空");
+            return null;
         }
-        
-        return processResourceFallback(title, topic, link, platform, subjectId);
+
+        aiResponse = cleanAiJsonResponse(aiResponse);
+
+        try {
+            JsonNode jsonNode = objectMapper.readTree(aiResponse);
+
+            long kpId = jsonNode.has("knowledge_point_id") ? jsonNode.get("knowledge_point_id").asLong(-1) : -1;
+            Long finalKpId = resolveKnowledgePointId(kpId, knowledgePoints, title);
+
+            String kpName = null;
+            if (finalKpId != null) {
+                long tempId = finalKpId;
+                kpName = knowledgePoints.stream()
+                        .filter(kp -> kp.getId().equals(tempId))
+                        .map(KnowledgePoint::getName)
+                        .findFirst()
+                        .orElse(null);
+            }
+
+            AiMatchResult result = new AiMatchResult();
+            result.setKnowledgePointId(finalKpId);
+            result.setKnowledgePointName(kpName);
+
+            String tags = jsonNode.has("tags") ? jsonNode.get("tags").asText("") : "";
+            result.setTags(truncateTags(tags, 5));
+
+            String confidence = jsonNode.has("ai_match_confidence") ? jsonNode.get("ai_match_confidence").asText("") : "";
+            result.setConfidence(truncateTags(confidence, 5));
+
+            String description = jsonNode.has("description") ? jsonNode.get("description").asText("") : "";
+            if (description.length() > 50) {
+                description = description.substring(0, 50);
+            }
+            result.setDescription(description);
+
+            result.setMatchInfo(buildMatchInfoJson(subjectId, finalKpId, kpName, platform, jsonNode, pageContent,
+                    matchVersion));
+            result.setAiMatchVersion(matchVersion);
+
+            logger.info("AI处理完成，知识点ID: " + finalKpId + ", 知识点名称: " + kpName + ", 标签: " + result.getTags());
+            return result;
+        } catch (Exception e) {
+            logger.warning("解析AI返回的JSON失败: " + e.getMessage() + ", response: " + aiResponse);
+            return null;
+        }
+    }
+
+    private String cleanAiJsonResponse(String aiResponse) {
+        aiResponse = aiResponse.trim();
+        if (aiResponse.startsWith("```json")) {
+            aiResponse = aiResponse.substring(7);
+        } else if (aiResponse.startsWith("```")) {
+            aiResponse = aiResponse.substring(3);
+        }
+        if (aiResponse.endsWith("```")) {
+            aiResponse = aiResponse.substring(0, aiResponse.length() - 3);
+        }
+        return aiResponse.trim();
+    }
+
+    private Long resolveKnowledgePointId(long kpId, List<KnowledgePoint> knowledgePoints, String title) {
+        if (kpId == -1 || kpId == 0) {
+            logger.info("AI返回-1或0，使用本地匹配");
+            return localMatchKnowledgePoint(knowledgePoints, title, extractTags(title));
+        }
+
+        long finalId = kpId;
+        boolean exists = knowledgePoints.stream().anyMatch(kp -> kp.getId().equals(finalId));
+        if (exists) {
+            logger.info("AI返回的知识点ID有效: " + kpId);
+            return kpId;
+        }
+
+        logger.warning("AI返回的知识点ID不存在于列表中: " + kpId + "，使用本地匹配");
+        return localMatchKnowledgePoint(knowledgePoints, title, extractTags(title));
+    }
+
+    private String buildMatchInfoJson(Long subjectId, Long knowledgePointId, String knowledgePointName,
+            String platform, JsonNode jsonNode, ResourcePageContent pageContent, String matchVersion) {
+        String level = "";
+        String pace = "";
+        String format = "";
+        String discipline = "";
+        String trait = "";
+
+        if (jsonNode.has("match_dimensions")) {
+            JsonNode dims = jsonNode.get("match_dimensions");
+            level = dims.has("level") ? dims.get("level").asText("") : "";
+            pace = dims.has("pace") ? dims.get("pace").asText("") : "";
+            format = dims.has("format") ? dims.get("format").asText("") : "";
+            discipline = dims.has("discipline") ? dims.get("discipline").asText("") : "";
+            trait = dims.has("trait") ? dims.get("trait").asText("") : "";
+        }
+
+        String urlFetchSuccess = pageContent != null && pageContent.isFetchSuccess() ? "true" : "false";
+        String urlFetchSource = pageContent != null && pageContent.getFetchSource() != null
+                ? pageContent.getFetchSource() : "";
+
+        return String.format(
+                "{\"subjectId\":%d,\"knowledgePointId\":%d,\"knowledgePointName\":\"%s\",\"platform\":\"%s\","
+                        + "\"aiMatchVersion\":\"%s\",\"urlFetchSuccess\":%s,\"urlFetchSource\":\"%s\","
+                        + "\"matchDimensions\":{\"level\":\"%s\",\"pace\":\"%s\",\"format\":\"%s\",\"discipline\":\"%s\",\"trait\":\"%s\"}}",
+                subjectId != null ? subjectId : 0,
+                knowledgePointId != null ? knowledgePointId : 0,
+                escapeJson(knowledgePointName),
+                escapeJson(platform),
+                escapeJson(matchVersion),
+                urlFetchSuccess,
+                escapeJson(urlFetchSource),
+                escapeJson(level),
+                escapeJson(pace),
+                escapeJson(format),
+                escapeJson(discipline),
+                escapeJson(trait));
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
     
-    private AiMatchResult processResourceFallback(String title, String topic, String link, String platform, Long subjectId) {
+    private AiMatchResult processResourceFallback(String title, String topic, String link, String platform,
+            Long subjectId, String resourceType) {
+        return processResourceFallback(title, topic, link, platform, subjectId, resourceType, null,
+                versionManager.getCurrentVersion());
+    }
+
+    private AiMatchResult processResourceFallback(String title, String topic, String link, String platform,
+            Long subjectId, String resourceType, ResourcePageContent pageContent, String matchVersion) {
         AiMatchResult result = new AiMatchResult();
         
         List<String> tags = extractTags(title);
@@ -592,21 +638,28 @@ public class AiMatchService {
         
         String tagsStr = tags != null ? String.join(",", tags) : "";
         tagsStr = truncateTags(tagsStr, 5);
-        
-        String confidence = "medium";
-        if (knowledgePointId != null) {
-            confidence = "高难度,需要自律,易错点多,适合进阶学习者,有挑战性";
-        } else {
-            confidence = "中等难度,适合初学者,需要练习,基础入门,循序渐进";
-        }
-        
+
+        String confidence = inferFallbackConfidence(title, topic, resourceType, knowledgePointId != null);
+
         String description = generateDescription(title, topic, platform);
         if (description.length() > 50) {
-            description = description.substring(0, 50) + "...";
+            description = description.substring(0, 50);
         }
-        
-        String matchInfo = String.format("{\"subjectId\":%d,\"knowledgePointId\":%d,\"knowledgePointName\":\"%s\",\"platform\":\"%s\"}", 
-                subjectId, knowledgePointId != null ? knowledgePointId : 0, kpName != null ? kpName : "", platform);
+
+        String matchInfo = String.format(
+                "{\"subjectId\":%d,\"knowledgePointId\":%d,\"knowledgePointName\":\"%s\",\"platform\":\"%s\","
+                        + "\"aiMatchVersion\":\"%s\",\"urlFetchSuccess\":%s,\"urlFetchSource\":\"%s\","
+                        + "\"matchDimensions\":{\"level\":\"%s\",\"pace\":\"%s\",\"format\":\"%s\",\"discipline\":\"%s\",\"trait\":\"%s\"},"
+                        + "\"fallback\":true}",
+                subjectId, knowledgePointId != null ? knowledgePointId : 0,
+                escapeJson(kpName), escapeJson(platform), escapeJson(matchVersion),
+                pageContent != null && pageContent.isFetchSuccess() ? "true" : "false",
+                escapeJson(pageContent != null ? pageContent.getFetchSource() : ""),
+                escapeJson(confidence.split(",")[0]),
+                escapeJson(confidence.split(",").length > 1 ? confidence.split(",")[1] : "适中"),
+                escapeJson(confidence.split(",").length > 2 ? confidence.split(",")[2] : "视频向"),
+                escapeJson(confidence.split(",").length > 3 ? confidence.split(",")[3] : "中等自律"),
+                escapeJson(confidence.split(",").length > 4 ? confidence.split(",")[4] : "理解为主"));
         
         result.setKnowledgePointId(knowledgePointId);
         result.setKnowledgePointName(kpName);
@@ -614,8 +667,34 @@ public class AiMatchService {
         result.setConfidence(confidence);
         result.setDescription(description);
         result.setMatchInfo(matchInfo);
+        result.setAiMatchVersion(matchVersion);
         
         return result;
+    }
+
+    private String inferFallbackConfidence(String title, String topic, String resourceType, boolean matched) {
+        String combined = ((title != null ? title : "") + " " + (topic != null ? topic : "")).toLowerCase();
+
+        String level = combined.matches(".*(入门|零基础|基础|初级).*") ? "基础"
+                : combined.matches(".*(进阶|高级|竞赛|专题|深入).*") ? "进阶" : matched ? "中等" : "入门";
+        String pace = combined.matches(".*(速成|冲刺|突击|三天|速通).*") ? "速成突击"
+                : combined.matches(".*(详解|推导|系统|完整|精讲).*") ? "系统讲解" : "适中";
+        String format = "视频向";
+        if (resourceType != null) {
+            String type = resourceType.toLowerCase();
+            if (type.contains("doc") || type.contains("text") || type.contains("article") || type.contains("pdf")) {
+                format = "文本向";
+            } else if (type.contains("audio")) {
+                format = "音频向";
+            } else if (type.contains("exercise") || type.contains("practice") || type.contains("quiz")) {
+                format = "实践向";
+            }
+        }
+        String discipline = combined.matches(".*(速成|冲刺|突击).*") ? "适合突击" : "中等自律";
+        String trait = combined.matches(".*(易错|陷阱|常见错误).*") ? "易错点多"
+                : combined.matches(".*(计算|公式|运算).*") ? "计算密集" : "理解为主";
+
+        return level + "," + pace + "," + format + "," + discipline + "," + trait;
     }
     
     private List<String> extractTags(String title) {

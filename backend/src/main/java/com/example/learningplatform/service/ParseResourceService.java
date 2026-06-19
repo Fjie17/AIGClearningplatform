@@ -33,6 +33,9 @@ public class ParseResourceService {
     private AiMatchService aiMatchService;
 
     @Autowired
+    private AiMatchVersionManager versionManager;
+
+    @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
     /**
@@ -270,7 +273,10 @@ public class ParseResourceService {
                     dto.getTopic(),
                     dto.getResourceUrl(),
                     dto.getPlatform(),
-                    subjectId
+                    subjectId,
+                    dto.getResourceType(),
+                    dto.getDuration(),
+                    dto.getClassHours()
                 );
 
                 // 创建资源实体
@@ -290,6 +296,8 @@ public class ParseResourceService {
                 resource.setAiMatchInfo(aiResult.getMatchInfo());
                 resource.setTags(aiResult.getTags());
                 resource.setDescription(aiResult.getDescription());
+                resource.setAiMatchVersion(aiResult.getAiMatchVersion() != null
+                        ? aiResult.getAiMatchVersion() : versionManager.getCurrentVersion());
                 resource.setResourceUrl(dto.getResourceUrl());
                 resource.setResourceType(dto.getResourceType());
                 resource.setDuration(dto.getDuration());

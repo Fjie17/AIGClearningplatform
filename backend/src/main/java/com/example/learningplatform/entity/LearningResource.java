@@ -53,6 +53,9 @@ public class LearningResource {
     @Column(columnDefinition = "text")
     private String description;         // 资源描述
 
+    @Column(name = "ai_match_version")
+    private String aiMatchVersion;      // AI匹配算法版本号，默认1.0
+
     // ==================================
     // getter / setter
     // ==================================
@@ -115,4 +118,7 @@ public class LearningResource {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getAiMatchVersion() { return aiMatchVersion; }
+    public void setAiMatchVersion(String aiMatchVersion) { this.aiMatchVersion = aiMatchVersion; }
 }

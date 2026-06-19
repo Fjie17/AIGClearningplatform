@@ -40,6 +40,7 @@ public class LearningResourceDTO {
     private String aiMatchInfo;         // AI匹配详细信息
     private String tags;                // 标签，逗号分隔
     private String description;         // 资源描述
+    private String aiMatchVersion;      // AI匹配算法版本号
 
     // ==================================
     // getter/setter
@@ -106,4 +107,7 @@ public class LearningResourceDTO {
 
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
+
+    public String getAiMatchVersion() { return aiMatchVersion; }
+    public void setAiMatchVersion(String aiMatchVersion) { this.aiMatchVersion = aiMatchVersion; }
 }

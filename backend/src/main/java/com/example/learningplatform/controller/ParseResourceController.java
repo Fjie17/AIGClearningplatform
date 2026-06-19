@@ -15,6 +15,10 @@ import org.springframework.web.multipart.MultipartFile;
 import com.example.learningplatform.dto.AiMatchRequest;
 import com.example.learningplatform.dto.AiMatchResult;
 import com.example.learningplatform.dto.AiProcessResponse;
+import com.example.learningplatform.dto.AiMatchVersionStatusDTO;
+import com.example.learningplatform.dto.AiRematchRequest;
+import com.example.learningplatform.dto.AiRematchTestRequest;
+import com.example.learningplatform.dto.AiRematchTestResponse;
 import com.example.learningplatform.dto.LearningResourceDTO;
 import com.example.learningplatform.dto.ParsePreviewResponse;
 import com.example.learningplatform.dto.ResourceStructureDTO;
@@ -23,7 +27,9 @@ import com.example.learningplatform.dto.StructureStatsDTO;
 import com.example.learningplatform.entity.KnowledgePoint;
 import com.example.learningplatform.repository.KnowledgePointRepository;
 import com.example.learningplatform.service.AiMatchService;
+import com.example.learningplatform.service.AiMatchVersionManager;
 import com.example.learningplatform.service.ParseResourceService;
+import com.example.learningplatform.service.ResourceRematchService;
 import com.example.learningplatform.service.StructureService;
 
 @RestController
@@ -41,6 +47,9 @@ public class ParseResourceController {
 
     @Autowired
     private StructureService structureService;
+
+    @Autowired
+    private ResourceRematchService resourceRematchService;
 
     /**
      * 清洗数据接口
@@ -101,7 +110,7 @@ public class ParseResourceController {
             AiMatchResult result = aiMatchService.processResourceWithKnowledgePoints(
                 request.getTitle(),
                 request.getTopic(),
-                null,
+                request.getResourceUrl(),
                 request.getPlatform(),
                 knowledgePoints
             );
@@ -109,6 +118,62 @@ public class ParseResourceController {
             return Result.success("匹配成功", result);
         } catch (Exception e) {
             return Result.error("匹配失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 重新 AI 匹配（开发测试版）
+     * 基于资源 URL 页面内容重新匹配，最多处理 5 条以节省 token；
+     * 写入版本号为「当前算法版本 + 测试版」（如 1.0测试版）。
+     */
+    @PostMapping("/ai-rematch-test")
+    public Result<AiRematchTestResponse> rematchTest(@RequestBody(required = false) AiRematchTestRequest request) {
+        try {
+            if (request == null) {
+                request = new AiRematchTestRequest();
+            }
+            if (request.getResourceIds() != null && request.getResourceIds().size() > AiMatchVersionManager.TEST_BATCH_LIMIT) {
+                return Result.error("测试模式最多指定 " + AiMatchVersionManager.TEST_BATCH_LIMIT + " 条资源");
+            }
+            AiRematchTestResponse response = resourceRematchService.rematchTest(request);
+            return Result.success("测试重新匹配完成", response);
+        } catch (Exception e) {
+            return Result.error("测试重新匹配失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 查看 AI 匹配版本状态（各版本资源数量、待升级数量）。
+     */
+    @GetMapping("/ai-match-version")
+    public Result<AiMatchVersionStatusDTO> getAiMatchVersion(
+            @RequestParam(required = false) Long subjectId) {
+        try {
+            return Result.success("查询成功", resourceRematchService.getVersionStatus(subjectId));
+        } catch (Exception e) {
+            return Result.error("查询失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 正式批量重新 AI 匹配：处理所有 ai_match_version ≠ 当前正式版的资源，
+     * 重新匹配后写入当前正式版（ai.match-version 配置值）。
+     * 耗时可较长，建议先 GET /ai-match-version 确认 outdatedCount，再 confirm=true 执行。
+     */
+    @PostMapping("/ai-rematch")
+    public Result<AiRematchTestResponse> rematchOutdated(@RequestBody AiRematchRequest request) {
+        try {
+            if (request == null || !Boolean.TRUE.equals(request.getConfirm())) {
+                AiMatchVersionStatusDTO status = resourceRematchService.getVersionStatus(
+                        request != null ? request.getSubjectId() : null);
+                return Result.error(String.format(
+                        "正式批量 rematch 需 confirm=true。当前正式版=%s，待升级=%d 条。请先 GET /ai-match-version 确认后再执行。",
+                        status.getCurrentVersion(), status.getOutdatedCount()));
+            }
+            AiRematchTestResponse response = resourceRematchService.rematchOutdated(request);
+            return Result.success("正式批量重新匹配完成", response);
+        } catch (Exception e) {
+            return Result.error("正式批量重新匹配失败: " + e.getMessage());
         }
     }
 

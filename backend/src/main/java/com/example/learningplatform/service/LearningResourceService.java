@@ -443,6 +443,7 @@ public class LearningResourceService {
         dto.setDescription(resource.getDescription());
         dto.setAiMatchConfidence(resource.getAiMatchConfidence());
         dto.setAiMatchInfo(resource.getAiMatchInfo());
+        dto.setAiMatchVersion(resource.getAiMatchVersion());
         
         return dto;
     }

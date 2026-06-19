@@ -166,6 +166,7 @@ public class StructureService {
         dto.setAiMatchInfo(resource.getAiMatchInfo());
         dto.setTags(resource.getTags());
         dto.setDescription(resource.getDescription());
+        dto.setAiMatchVersion(resource.getAiMatchVersion());
         
         if (resource.getKnowledgePointId() != null) {
             knowledgePointRepository.findById(resource.getKnowledgePointId())
