@@ -255,6 +255,4 @@ backend/src/main/resources/application.properties
 
 ## 作者
 
-[Fjie17](https://github.com/Fjie17) · 冯婕
-
-**指导教师**：邓丽丽 · 浙江工业大学管理学院
+[Fjie17](https://github.com/Fjie17) 
